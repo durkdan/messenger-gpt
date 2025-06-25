@@ -46,11 +46,18 @@ def get_huggingface_reply(message):
         return "🤖 Model responded, but no text was generated."
     else:
         print(f"❌ HF API failed with status {response.status_code}: {response.text}")
-        return "It didn't work, try again. The model didn't meet your reply/question."
+        return "It didn't work, try again. The model didn't meet your reply/question. Kick niyo nga si christian baka gagana"
 
 @app.route("/", methods=["GET"])
 def home():
     return "✅ Bot is online!"
+
+@app.route("/test", methods=["GET"])
+def test_bot():
+    # Test if Hugging Face API is working
+    test_message = "Hello"
+    reply = get_huggingface_reply(test_message)
+    return f"<h2>Bot Test</h2><p><strong>Test message:</strong> '{test_message}'</p><p><strong>Bot reply:</strong> '{reply}'</p>"
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
