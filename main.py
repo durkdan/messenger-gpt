@@ -4,28 +4,34 @@ import os
 
 app = Flask(__name__)
 
-HUGGINGFACE_API_KEY = os.getenv("shh")  # Make sure this is set to your Hugging Face token
+HUGGINGFACE_API_KEY = os.getenv("shh")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
 
-# Falcon-7B-Instruct for Q&A
-def get_falcon_answer(question):
+# AI model: Falcon-7B-Instruct (open-access, safe to use)
+def get_ai_answer(prompt):
     url = "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct"
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {"inputs": question}
+    payload = {"inputs": prompt}
     response = requests.post(url, headers=headers, json=payload)
-    try:
-        output = response.json()
-        return output[0]["generated_text"]
-    except:
-        return "🤖 I couldn't understand that."
 
-# BART summarizer (optional, unused here)
+    try:
+        result = response.json()
+        if isinstance(result, list) and "generated_text" in result[0]:
+            return result[0]["generated_text"]
+        elif "error" in result:
+            return f"🤖 HuggingFace error: {result['error']}"
+    except Exception as e:
+        return f"🤖 Parsing error: {e}"
+
+    return "🤖 I couldn't understand that."
+
+# Optional summarizer (still here in case you use it later)
 def summarize_text(text):
     url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
     headers = {
@@ -39,6 +45,7 @@ def summarize_text(text):
     except:
         return "🤖 Summary unavailable."
 
+# Task list feature
 def handle_list_command(text):
     parts = text.strip().split()
     cmd = parts[0].lower()
@@ -84,12 +91,24 @@ def handle_list_command(text):
             "  → Displays all tasks you’ve listed\n\n"
             ".list clear \"Subject\"\n"
             "  → Clears all tasks under a subject\n\n"
+            ".reach\n"
+            "  → Checks if AI model is online and responding\n\n"
             ".help\n"
             "  → Shows this help message\n\n"
             "Subjects: Fil, Sci, Ap, TLE, Math, Mapeh, Eng, Esp"
         )
 
     return None
+
+# New `.reach` command to test API access
+def test_model_reachability():
+    try:
+        reply = get_ai_answer("Test")
+        if "🤖" in reply or "error" in reply.lower():
+            return f"⚠️ Model responded but with error:\n{reply}"
+        return "✅ AI model is reachable and responding!"
+    except Exception as e:
+        return f"❌ Could not reach model: {e}"
 
 @app.route("/", methods=["GET"])
 def home():
@@ -120,6 +139,7 @@ def webhook():
 
                 message_lower = message.lower().strip()
 
+                # Predefined responses
                 if message_lower in ["hello", "yo", "oy", "hoy", "what up", "hi"]:
                     reply = (
                         "Hi, I am Messenger-GPT fully owned by DrunksDan. My purpose is to answer your questions, "
@@ -130,15 +150,18 @@ def webhook():
                 elif message_lower in ["are you online?", "online", "are you on", "online ka ba"]:
                     reply = "YES! Fully up and responding here to fulfill your request and answers!."
 
+                elif message_lower == ".reach":
+                    reply = test_model_reachability()
+
                 else:
                     reply = handle_list_command(message)
-
                     if not reply:
                         try:
-                            reply = get_falcon_answer(message)
+                            reply = get_ai_answer(message)
                         except Exception as e:
                             reply = f"🤖 Error contacting AI: {e}"
 
+                # Send back to user
                 send_url = "https://graph.facebook.com/v18.0/me/messages"
                 params = {"access_token": PAGE_ACCESS_TOKEN}
                 headers = {"Content-Type": "application/json"}
