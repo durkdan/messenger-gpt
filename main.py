@@ -18,11 +18,23 @@ def get_mistral_answer(question):
         "Content-Type": "application/json"
     }
     payload = {"inputs": question}
+    print(f"🔍 Calling Mistral with: {question}")
+
     response = requests.post(url, headers=headers, json=payload)
+    print(f"📨 Mistral response code: {response.status_code}")
+    print(f"📨 Mistral response raw: {response.text}")
+
     try:
-        return response.json()[0]['generated_text']
-    except:
-        return "🤖 I couldn't understand that."
+        data = response.json()
+        if isinstance(data, list) and 'generated_text' in data[0]:
+            return data[0]['generated_text']
+        elif isinstance(data, dict) and 'generated_text' in data:
+            return data['generated_text']
+        elif 'error' in data:
+            return f"🤖 Mistral error: {data['error']}"
+        return "🤖 Mistral responded, but no usable text was found."
+    except Exception as e:
+        return f"🤖 JSON decode failed or no response: {e}"
 
 # BART for summarizing search result text
 def summarize_text(text):
