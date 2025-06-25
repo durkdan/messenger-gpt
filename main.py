@@ -10,31 +10,19 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
 
-# Mistral for Q&A
-def get_mistral_answer(question):
-    url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
+# Zephyr-7B for Q&A (free and public)
+def get_zephyr_answer(question):
+    url = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
     }
     payload = {"inputs": question}
-    print(f"🔍 Calling Mistral with: {question}")
-
     response = requests.post(url, headers=headers, json=payload)
-    print(f"📨 Mistral response code: {response.status_code}")
-    print(f"📨 Mistral response raw: {response.text}")
-
     try:
-        data = response.json()
-        if isinstance(data, list) and 'generated_text' in data[0]:
-            return data[0]['generated_text']
-        elif isinstance(data, dict) and 'generated_text' in data:
-            return data['generated_text']
-        elif 'error' in data:
-            return f"🤖 Mistral error: {data['error']}"
-        return "🤖 Mistral responded, but no usable text was found."
-    except Exception as e:
-        return f"🤖 JSON decode failed or no response: {e}"
+        return response.json()[0]['generated_text']
+    except:
+        return "🤖 I couldn't understand that."
 
 # BART for summarizing search result text
 def summarize_text(text):
@@ -146,7 +134,7 @@ def webhook():
 
                     if not reply:
                         try:
-                            reply = get_mistral_answer(message)
+                            reply = get_zephyr_answer(message)
                         except Exception as e:
                             reply = f"🤖 Error contacting AI: {e}"
 
