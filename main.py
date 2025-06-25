@@ -10,21 +10,37 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
 
-# Zephyr-7B for Q&A (free and public)
+# Zephyr-7B for Q&A
 def get_zephyr_answer(question):
     url = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {"inputs": question}
+    payload = {
+        "inputs": question,
+        "parameters": {
+            "max_new_tokens": 150,
+            "return_full_text": False
+        }
+    }
+
     response = requests.post(url, headers=headers, json=payload)
     try:
-        return response.json()[0]['generated_text']
-    except:
-        return "🤖 I couldn't understand that."
+        output = response.json()
+        # Handles output from HuggingFace correctly
+        if isinstance(output, list) and "generated_text" in output[0]:
+            return output[0]["generated_text"]
+        elif isinstance(output, dict) and "generated_text" in output:
+            return output["generated_text"]
+        elif isinstance(output, dict) and "error" in output:
+            return f"🤖 Zephyr error: {output['error']}"
+        else:
+            return "🤖 Unexpected response format from Zephyr."
+    except Exception as e:
+        return f"🤖 Error decoding Zephyr response: {e}"
 
-# BART for summarizing search result text
+# BART summarizer
 def summarize_text(text):
     url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
     headers = {
@@ -38,6 +54,7 @@ def summarize_text(text):
     except:
         return "🤖 Summary unavailable."
 
+# Command handler
 def handle_list_command(text):
     parts = text.strip().split()
     cmd = parts[0].lower()
