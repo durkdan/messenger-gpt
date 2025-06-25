@@ -10,9 +10,9 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
 
-# AI model: Falcon-7B-Instruct (open-access, safe to use)
+# Uses Google FLAN-T5 Small (free)
 def get_ai_answer(prompt):
-    url = "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct"
+    url = "https://api-inference.huggingface.co/models/google/flan-t5-small"
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
@@ -31,21 +31,24 @@ def get_ai_answer(prompt):
 
     return "🤖 I couldn't understand that."
 
-# Optional summarizer (still here in case you use it later)
-def summarize_text(text):
-    url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
+# Reach check
+def check_model_reach():
+    url = "https://api-inference.huggingface.co/models/google/flan-t5-small"
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {"inputs": text}
-    response = requests.post(url, headers=headers, json=payload)
+    payload = {"inputs": "Hello"}
     try:
-        return response.json()[0]['summary_text']
-    except:
-        return "🤖 Summary unavailable."
+        r = requests.post(url, headers=headers, json=payload)
+        if r.status_code == 200 and isinstance(r.json(), list):
+            return "✅ AI model is reachable and responding!"
+        else:
+            return f"⚠️ Model unreachable: {r.json().get('error', 'Unknown error')}"
+    except Exception as e:
+        return f"❌ Error reaching model: {e}"
 
-# Task list feature
+# Handle .list and .help
 def handle_list_command(text):
     parts = text.strip().split()
     cmd = parts[0].lower()
@@ -100,16 +103,6 @@ def handle_list_command(text):
 
     return None
 
-# New `.reach` command to test API access
-def test_model_reachability():
-    try:
-        reply = get_ai_answer("Test")
-        if "🤖" in reply or "error" in reply.lower():
-            return f"⚠️ Model responded but with error:\n{reply}"
-        return "✅ AI model is reachable and responding!"
-    except Exception as e:
-        return f"❌ Could not reach model: {e}"
-
 @app.route("/", methods=["GET"])
 def home():
     return "✅ Bot is online!"
@@ -139,7 +132,6 @@ def webhook():
 
                 message_lower = message.lower().strip()
 
-                # Predefined responses
                 if message_lower in ["hello", "yo", "oy", "hoy", "what up", "hi"]:
                     reply = (
                         "Hi, I am Messenger-GPT fully owned by DrunksDan. My purpose is to answer your questions, "
@@ -151,17 +143,17 @@ def webhook():
                     reply = "YES! Fully up and responding here to fulfill your request and answers!."
 
                 elif message_lower == ".reach":
-                    reply = test_model_reachability()
+                    reply = check_model_reach()
 
                 else:
                     reply = handle_list_command(message)
+
                     if not reply:
                         try:
                             reply = get_ai_answer(message)
                         except Exception as e:
                             reply = f"🤖 Error contacting AI: {e}"
 
-                # Send back to user
                 send_url = "https://graph.facebook.com/v18.0/me/messages"
                 params = {"access_token": PAGE_ACCESS_TOKEN}
                 headers = {"Content-Type": "application/json"}
