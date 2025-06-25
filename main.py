@@ -4,43 +4,28 @@ import os
 
 app = Flask(__name__)
 
-HUGGINGFACE_API_KEY = os.getenv("shh")
+HUGGINGFACE_API_KEY = os.getenv("shh")  # Make sure this is set to your Hugging Face token
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
 
-# Zephyr-7B for Q&A
-def get_zephyr_answer(question):
-    url = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
+# Falcon-7B-Instruct for Q&A
+def get_falcon_answer(question):
+    url = "https://api-inference.huggingface.co/models/tiiuae/falcon-7b-instruct"
     headers = {
         "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
         "Content-Type": "application/json"
     }
-    payload = {
-        "inputs": question,
-        "parameters": {
-            "max_new_tokens": 150,
-            "return_full_text": False
-        }
-    }
-
+    payload = {"inputs": question}
     response = requests.post(url, headers=headers, json=payload)
     try:
         output = response.json()
-        # Handles output from HuggingFace correctly
-        if isinstance(output, list) and "generated_text" in output[0]:
-            return output[0]["generated_text"]
-        elif isinstance(output, dict) and "generated_text" in output:
-            return output["generated_text"]
-        elif isinstance(output, dict) and "error" in output:
-            return f"🤖 Zephyr error: {output['error']}"
-        else:
-            return "🤖 Unexpected response format from Zephyr."
-    except Exception as e:
-        return f"🤖 Error decoding Zephyr response: {e}"
+        return output[0]["generated_text"]
+    except:
+        return "🤖 I couldn't understand that."
 
-# BART summarizer
+# BART summarizer (optional, unused here)
 def summarize_text(text):
     url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
     headers = {
@@ -54,7 +39,6 @@ def summarize_text(text):
     except:
         return "🤖 Summary unavailable."
 
-# Command handler
 def handle_list_command(text):
     parts = text.strip().split()
     cmd = parts[0].lower()
@@ -151,7 +135,7 @@ def webhook():
 
                     if not reply:
                         try:
-                            reply = get_zephyr_answer(message)
+                            reply = get_falcon_answer(message)
                         except Exception as e:
                             reply = f"🤖 Error contacting AI: {e}"
 
