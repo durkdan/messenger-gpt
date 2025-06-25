@@ -8,32 +8,87 @@ HUGGINGFACE_API_KEY = os.getenv("shh")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
-# Memory for .list command
 memory = {}
 
-# -- HF MODELS --
-MISTRAL_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
-BART_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
-HEADERS = {
-    "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
-    "Content-Type": "application/json"
-}
+# Mistral for Q&A
+def get_mistral_answer(question):
+    url = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
+    headers = {
+        "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {"inputs": question}
+    response = requests.post(url, headers=headers, json=payload)
+    try:
+        return response.json()[0]['generated_text']
+    except:
+        return "🤖 I couldn't understand that."
 
-def query_hf_model(model_url, input_text):
-    payload = {"inputs": input_text}
-    response = requests.post(model_url, headers=HEADERS, json=payload)
-    if response.status_code == 200:
-        try:
-            output = response.json()
-            if isinstance(output, list) and 'generated_text' in output[0]:
-                return output[0]['generated_text']
-            elif isinstance(output, dict) and 'summary_text' in output:
-                return output['summary_text']
-            elif isinstance(output, list) and 'summary_text' in output[0]:
-                return output[0]['summary_text']
-        except Exception as e:
-            return "🤖 Model parsed incorrectly."
-    return "🤖 Failed to get response from model."
+# BART for summarizing search result text
+def summarize_text(text):
+    url = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
+    headers = {
+        "Authorization": f"Bearer {HUGGINGFACE_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {"inputs": text}
+    response = requests.post(url, headers=headers, json=payload)
+    try:
+        return response.json()[0]['summary_text']
+    except:
+        return "🤖 Summary unavailable."
+
+def handle_list_command(text):
+    parts = text.strip().split()
+    cmd = parts[0].lower()
+
+    if cmd == ".list" and len(parts) >= 2:
+        sub_cmd = parts[1].lower()
+
+        if sub_cmd == "show":
+            if not memory:
+                return "There is no current required tasks."
+            result = ["Heres all the required tasks:"]
+            for subj, tasks in memory.items():
+                result.append(f"{subj.upper()}:")
+                for t in tasks:
+                    result.append(f"- {t}")
+            return "\n".join(result)
+
+        elif sub_cmd == "clear" and len(parts) == 3:
+            subject = parts[2].capitalize()
+            if subject in memory:
+                del memory[subject]
+                return f"List cleared for {subject}!"
+            else:
+                return f"Nothing to clear for {subject}."
+
+        elif len(parts) >= 4:
+            subject = parts[1].capitalize()
+            task_type = parts[2].upper()
+            task_content = " ".join(parts[3:])
+            if subject not in memory:
+                memory[subject] = []
+            memory[subject].append(f"[{task_type}] {task_content}")
+            return "Successfully listed input!"
+
+    elif cmd == ".help":
+        return (
+            "📘 Messenger-GPT Help Menu:\n"
+            "Commands you can use:\n\n"
+            ".list \"Subject\" \"PT/ASS/WW/BRING/REM\" Task\n"
+            "  → Adds a task to a subject\n"
+            "  Example: .list sci pt Finish the presentation\n\n"
+            ".list show\n"
+            "  → Displays all tasks you’ve listed\n\n"
+            ".list clear \"Subject\"\n"
+            "  → Clears all tasks under a subject\n\n"
+            ".help\n"
+            "  → Shows this help message\n\n"
+            "Subjects: Fil, Sci, Ap, TLE, Math, Mapeh, Eng, Esp"
+        )
+
+    return None
 
 @app.route("/", methods=["GET"])
 def home():
@@ -45,73 +100,54 @@ def webhook():
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
+
         if mode == "subscribe" and token == VERIFY_TOKEN:
             return challenge, 200
-        return "❌ Verification failed", 403
+        else:
+            return "Verification failed", 403
 
-    data = request.get_json()
-    for entry in data.get("entry", []):
-        for messaging_event in entry.get("messaging", []):
-            sender_id = messaging_event["sender"]["id"]
-            message = messaging_event.get("message", {}).get("text", "")
+    elif request.method == "POST":
+        data = request.get_json()
 
-            reply = handle_message(message.strip())
+        for entry in data.get("entry", []):
+            for messaging_event in entry.get("messaging", []):
+                sender_id = messaging_event["sender"]["id"]
+                message = messaging_event.get("message", {}).get("text")
 
-            send_url = "https://graph.facebook.com/v18.0/me/messages"
-            params = {"access_token": PAGE_ACCESS_TOKEN}
-            headers = {"Content-Type": "application/json"}
-            payload = {
-                "recipient": {"id": sender_id},
-                "message": {"text": reply}
-            }
-            requests.post(send_url, params=params, headers=headers, json=payload)
+                if not message:
+                    continue
 
-    return "✅ Message received", 200
+                message_lower = message.lower().strip()
 
-def handle_message(text):
-    if text.lower() in ["hello", "hi", "yo", "oy", "hoy", "what up"]:
-        return "Hi, I am Messenger-GPT fully owned by DrunksDan. I scan images, answer questions, and I'm in beta v0.7."
+                if message_lower in ["hello", "yo", "oy", "hoy", "what up", "hi"]:
+                    reply = (
+                        "Hi, I am Messenger-GPT fully owned by DrunksDan. My purpose is to answer your questions, "
+                        "try and scan your image, and if the image contains a question I will gladly like to help you with that.\n"
+                        "I am STILL in beta version. (Version: beta v.0.7)"
+                    )
 
-    if text.lower() in ["are you online?", "online", "are you on", "online ka ba"]:
-        return "YES! fully up and responding here to fulfill your request and answers!."
+                elif message_lower in ["are you online?", "online", "are you on", "online ka ba"]:
+                    reply = "YES! Fully up and responding here to fulfill your request and answers!."
 
-    if text.lower().startswith(".list"):
-        return process_list_command(text)
+                else:
+                    reply = handle_list_command(message)
 
-    # For general queries, default to Mistral
-    return query_hf_model(MISTRAL_URL, text)
+                    if not reply:
+                        try:
+                            reply = get_mistral_answer(message)
+                        except Exception as e:
+                            reply = f"🤖 Error contacting AI: {e}"
 
-def process_list_command(text):
-    parts = text.split(" ")
-    if len(parts) < 2:
-        return "⚠️ Invalid .list usage."
+                send_url = "https://graph.facebook.com/v18.0/me/messages"
+                params = {"access_token": PAGE_ACCESS_TOKEN}
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "recipient": {"id": sender_id},
+                    "message": {"text": reply}
+                }
+                requests.post(send_url, params=params, headers=headers, json=payload)
 
-    if parts[1].lower() == "show":
-        if not memory:
-            return "There is no current required tasks."
-        response = ["Here's all the required tasks:"]
-        for subj, tasks in memory.items():
-            for category, entry in tasks.items():
-                response.append(f"{subj.upper()} [{category.upper()}]: {entry}")
-        return "\n".join(response)
-
-    if parts[1].lower() == "clear" and len(parts) >= 3:
-        subject = parts[2].capitalize()
-        if subject in memory:
-            memory.pop(subject)
-            return f"List cleared for {subject}!"
-        return f"No list found for {subject}."
-
-    if len(parts) >= 4:
-        subject = parts[1].capitalize()
-        category = parts[2].upper()
-        content = " ".join(parts[3:])
-        if subject not in memory:
-            memory[subject] = {}
-        memory[subject][category] = content
-        return "Successfully listed input!"
-
-    return "⚠️ Incomplete .list command."
+        return "✅ Message received", 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
