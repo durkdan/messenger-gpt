@@ -12,7 +12,7 @@ memory = {}
 
 # Use Gemini 2.0 Flash
 def get_gemini_answer(prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyAbwUa5XHCt1k1GqZlBAQHVeddEGL81-lw"
     headers = {
         "Content-Type": "application/json"
     }
