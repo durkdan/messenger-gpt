@@ -1,7 +1,6 @@
 from flask import Flask, request
 import requests
 import os
-import re
 
 app = Flask(__name__)
 
@@ -10,39 +9,42 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
-answers = {}
-answer_counter = 1
 
-# Google Gemini call
+# Use Gemini 2.0 Flash
 def get_gemini_answer(prompt):
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
-    headers = {"Content-Type": "application/json"}
-    params = {"key": GEMINI_API_KEY}
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    headers = {
+        "Content-Type": "application/json"
     }
-    try:
-        r = requests.post(url, headers=headers, params=params, json=payload)
-        r.raise_for_status()
-        data = r.json()
-        return data['candidates'][0]['content']['parts'][0]['text']
-    except Exception as e:
-        return f"🤖 Gemini error: {e}"
+    payload = {
+        "contents": [
+            {
+                "parts": [{"text": prompt}]
+            }
+        ]
+    }
 
-# Reach check
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        result = response.json()
+        if "candidates" in result:
+            return result["candidates"][0]["content"]["parts"][0]["text"]
+        elif "error" in result:
+            return f"🤖 Gemini error: {result['error'].get('message', 'Unknown error')}"
+        else:
+            return "🤖 No response from Gemini."
+    except Exception as e:
+        return f"🤖 Error reaching Gemini: {e}"
+
+# Check Gemini model reachability
 def check_model_reach():
     test_prompt = "Hello"
-    try:
-        reply = get_gemini_answer(test_prompt)
-        if reply and isinstance(reply, str):
-            return "✅ Gemini API is reachable and responding!"
-        else:
-            return "⚠️ Gemini API didn't return a valid response."
-    except Exception as e:
-        return f"❌ Error reaching Gemini: {e}"
+    reply = get_gemini_answer(test_prompt)
+    if reply.startswith("🤖"):
+        return reply
+    return "✅ Gemini AI model is reachable and responding!"
 
 # Handle .list and .help
-
 def handle_list_command(text):
     parts = text.strip().split()
     cmd = parts[0].lower()
@@ -89,14 +91,9 @@ def handle_list_command(text):
             ".list clear \"Subject\"\n"
             "  → Clears all tasks under a subject\n\n"
             ".reach\n"
-            "  → Checks if Gemini model is online and responding\n\n"
-            ".explain [number]/all\n"
-            "  → Explains answer(s) based on the tracked questions\n\n"
-            ".write [subject] [category] [topic]\n"
-            "  → Generate paragraphs/speech for school work\n\n"
-            ".rewrite [text]\n"
-            "  → Rewrite the provided sentence\n\n"
-            "Subjects: Fil, Sci, Ap, TLE, Math, Mapeh, Eng, Esp"
+            "  → Checks if Gemini AI is online\n\n"
+            ".help\n"
+            "  → Shows this help message\n"
         )
 
     return None
@@ -107,8 +104,6 @@ def home():
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
-    global answer_counter
-
     if request.method == "GET":
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
@@ -136,7 +131,7 @@ def webhook():
                     reply = (
                         "Hi, I am Messenger-GPT fully owned by DrunksDan. My purpose is to answer your questions, "
                         "try and scan your image, and if the image contains a question I will gladly like to help you with that.\n"
-                        "I am STILL in beta version. (Version: beta v.0.7)"
+                        "I am STILL in beta version. (Version: beta v.0.8 using Gemini)"
                     )
 
                 elif message_lower in ["are you online?", "online", "are you on", "online ka ba"]:
@@ -145,47 +140,14 @@ def webhook():
                 elif message_lower == ".reach":
                     reply = check_model_reach()
 
-                elif message_lower.startswith(".explain"):
-                    parts = message_lower.split()
-                    if len(parts) == 2 and parts[1] == "all":
-                        all_expl = [f"{i}. {a}" for i, a in answers.items()]
-                        reply = "\n".join(all_expl) if all_expl else "No explanations stored."
-                    elif len(parts) == 2 and parts[1].isdigit():
-                        key = int(parts[1])
-                        reply = answers.get(key, f"No explanation for #{key}.")
-                    else:
-                        reply = "Usage: .explain [number] or .explain all"
-
-                elif message_lower.startswith(".write"):
-                    try:
-                        parts = message.split(" ", 3)
-                        subject = parts[1]
-                        category = parts[2]
-                        topic = parts[3]
-                        prompt = f"Write a {category} in {subject} about: {topic}"
-                        reply = get_gemini_answer(prompt)
-                    except:
-                        reply = "Usage: .write [subject] [category] [topic]"
-
-                elif message_lower.startswith(".rewrite"):
-                    text_to_rewrite = message[len(".rewrite"):].strip()
-                    if text_to_rewrite:
-                        prompt = f"Rewrite this clearly and professionally: {text_to_rewrite}"
-                        reply = get_gemini_answer(prompt)
-                    else:
-                        reply = "Usage: .rewrite [text]"
-
                 else:
                     reply = handle_list_command(message)
 
                     if not reply:
-                        if re.match(r"^(who|what|when|where|why|how|if)[\s\S]*", message_lower):
-                            answer = get_gemini_answer(message)
-                            answers[answer_counter] = f"Q: {message}\nA: {answer}"
-                            reply = f"{answer_counter}. {answer.splitlines()[0]}"
-                            answer_counter += 1
-                        else:
+                        try:
                             reply = get_gemini_answer(message)
+                        except Exception as e:
+                            reply = f"🤖 Error: {e}"
 
                 send_url = "https://graph.facebook.com/v18.0/me/messages"
                 params = {"access_token": PAGE_ACCESS_TOKEN}
