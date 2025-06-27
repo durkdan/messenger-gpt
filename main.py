@@ -14,7 +14,7 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
-sender_ids = set()  # Track users to send scheduled messages
+sender_ids = set()
 
 # Gemini request with retry logic and logging
 def get_gemini_answer(prompt, retries=2):
@@ -41,128 +41,44 @@ def get_gemini_answer(prompt, retries=2):
 
     return "🤖 Gemini failed to respond after retries."
 
-# Reachability check
 def check_model_reach():
     reply = get_gemini_answer("Hello")
     return reply if reply.startswith("🤖") else "✅ Gemini AI model is reachable and responding!"
 
-# Scheduled reminder task
 def scheduled_reminder():
     try:
-        res = requests.get("http://worldclockapi.com/api/json/sg/now", timeout=5)
+        res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
         data = res.json()
-        current_time = data["currentDateTime"]
-        dt = datetime.strptime(current_time, "%Y-%m-%dT%H:%M%z")
+        dt = datetime.fromisoformat(data["datetime"])
         day_of_week = dt.weekday()
         time_str = dt.strftime("%H:%M")
 
-        if day_of_week == 0 and time_str == "07:30":  # Monday 07:30 AM
+        if day_of_week == 0 and time_str == "07:30":
             for sid in sender_ids:
                 send_text_reply(sid, "🚜 Reminder: You're on classroom cleaning duty today! Don't forget to check your task list with .list show")
     except Exception as e:
         print(f"[Scheduler Error]: {e}")
 
-# .list, .chores, .help command handler
 def handle_list_command(text):
     global memory
     parts = text.strip().split()
     cmd = parts[0].lower()
 
-    if cmd in [".list", ".chores"]:
-        is_chores = cmd == ".chores"
-
-        if len(parts) >= 2:
-            sub_cmd = parts[1].lower()
-
-            if sub_cmd == "show":
-                if len(parts) == 3 and parts[2] == "id":
-                    try:
-                        encoded = base64.b64encode(json.dumps(memory).encode()).decode()
-                        return f"📜 Your encoded task list:\n\n{encoded}"
-                    except Exception as e:
-                        return f"⚠️ Failed to encode memory: {e}"
-
-                if not memory:
-                    return "There is no current required tasks."
-                result = ["Heres all the required tasks:"]
-                for subj, tasks in memory.items():
-                    result.append(f"{subj.upper()}:")
-                    for t in tasks:
-                        result.append(f"- {t}")
-                return "\n".join(result)
-
-            elif sub_cmd == "import" and len(parts) >= 3:
-                try:
-                    b64_data = parts[2]
-                    decoded = json.loads(base64.b64decode(b64_data.encode()).decode())
-                    for k, v in decoded.items():
-                        memory[k] = v
-                    return "✅ Imported tasks into memory!"
-                except Exception as e:
-                    return f"❌ Failed to import: {e}"
-
-            elif sub_cmd == "clear" and len(parts) == 3:
-                subject = parts[2].capitalize()
-                if subject in memory:
-                    del memory[subject]
-                    return f"List cleared for {subject}!"
-                return f"Nothing to clear for {subject}."
-
-            elif sub_cmd == "clear" and parts[2].lower() == "all":
-                memory.clear()
-                return "✅ All subjects cleared from memory."
-
-            elif is_chores and len(parts) >= 2:
-                task_content = " ".join(parts[1:])
-                if "Chores" not in memory:
-                    memory["Chores"] = []
-                memory["Chores"].append(task_content)
-                return "✅ Chore added!"
-
-            elif len(parts) >= 4:
-                subject = parts[1].capitalize()
-                task_type = parts[2].upper()
-                task_content = " ".join(parts[3:])
-                if subject not in memory:
-                    memory[subject] = []
-                memory[subject].append(f"[{task_type}] {task_content}")
-                return "✅ Successfully listed input!"
-
-    elif cmd == ".help":
-        return (
-            "📘 Messenger-GPT Help Menu:\n"
-            "Commands you can use:\n\n"
-            ".list [Subject] [PT/ASS/WW/BRING/REM] Task\n"
-            "  → Adds a task to a subject\n"
-            "  Example: .list sci pt Finish the presentation\n\n"
-            ".list show\n"
-            "  → Displays all tasks you’ve listed\n\n"
-            ".list show id\n"
-            "  → Export your task list as a base64 code (backup)\n\n"
-            ".list import [base64]\n"
-            "  → Import a previously saved task list\n\n"
-            ".list clear [Subject]\n"
-            "  → Clears all tasks under a subject\n\n"
-            ".list clear all\n"
-            "  → Clears all subjects\n\n"
-            ".reach\n"
-            "  → Checks if Gemini AI is online\n\n"
-            ".time\n"
-            "  → Checks current time in Singapore\n\n"
-            ".schedule [day] [message]\n"
-            "  → Schedule a message for a weekday (Monday to Friday)"
-        )
-
-    elif cmd == ".time":
+    if cmd == ".time":
         try:
-            res = requests.get("http://worldclockapi.com/api/json/sg/now", timeout=5)
-            data = res.json()
-            current_time = data["currentDateTime"]
-            dt = datetime.strptime(current_time, "%Y-%m-%dT%H:%M%z")
-            return dt.strftime("🗕️ %A, %Y-%m-%d | ⏰ %H:%M:%S (UTC+8 Singapore/Kuala Lumpur)")
+            try:
+                res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Kuala_Lumpur", timeout=5)
+                data = res.json()
+            except Exception as e:
+                print(f"[Time API Fallback]: KL failed with {e}, trying Singapore...")
+                res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
+                data = res.json()
+
+            dt = datetime.fromisoformat(data["datetime"])
+            return dt.strftime("📆 %A, %B %d, %Y | 🕒 %I:%M:%S %p (UTC+8)")
         except Exception as e:
             print(f"[Time Command Error]: {e}")
-            return "⚠️ Unable to fetch time."
+            return "⚠️ Unable to fetch time from both KL and SG."
 
     elif cmd == ".schedule" and len(parts) >= 3:
         weekday = parts[1].capitalize()
@@ -232,7 +148,6 @@ def webhook():
 
         return "✅ Message received", 200
 
-# Send temporary "thinking..." reply
 def send_typing_reply(sender_id, message):
     send_url = "https://graph.facebook.com/v18.0/me/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN}
@@ -243,7 +158,6 @@ def send_typing_reply(sender_id, message):
     }
     requests.post(send_url, params=params, headers=headers, json=payload)
 
-# Send final reply
 def send_text_reply(sender_id, message):
     send_url = "https://graph.facebook.com/v18.0/me/messages"
     params = {"access_token": PAGE_ACCESS_TOKEN}
