@@ -49,10 +49,9 @@ def check_model_reach():
 # Scheduled reminder task
 def scheduled_reminder():
     try:
-        res = requests.get("https://worldclockapi.com/api/json/utc/now")
+        res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
         data = res.json()
-        current_time = data["currentDateTime"]
-        dt = datetime.fromisoformat(current_time.replace("Z", ""))
+        dt = datetime.fromisoformat(data["datetime"])
         day_of_week = dt.weekday()
         time_str = dt.strftime("%H:%M")
 
@@ -148,17 +147,17 @@ def handle_list_command(text):
             ".reach\n"
             "  → Checks if Gemini AI is online\n\n"
             ".time\n"
-            "  → Checks current time in Manila\n\n"
+            "  → Checks current time in Singapore\n\n"
             ".schedule [day] [message]\n"
             "  → Schedule a message for a weekday (Monday to Friday)"
         )
 
     elif cmd == ".time":
         try:
-            res = requests.get("https://worldclockapi.com/api/json/utc/now", timeout=5)
+            res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
             data = res.json()
-            dt = datetime.fromisoformat(data["currentDateTime"].replace("Z", ""))
-            return dt.strftime("🗕️ %A, %Y-%m-%d | ⏰ %H:%M:%S")
+            dt = datetime.fromisoformat(data["datetime"])
+            return dt.strftime("🗕️ %A, %Y-%m-%d | ⏰ %H:%M:%S (Asia/Singapore)")
         except Exception as e:
             print(f"[Time Command Error]: {e}")
             return "⚠️ Unable to fetch time."
