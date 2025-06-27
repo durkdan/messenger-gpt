@@ -49,12 +49,11 @@ def check_model_reach():
 # Scheduled reminder task
 def scheduled_reminder():
     try:
-        res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Manila")
+        res = requests.get("https://worldclockapi.com/api/json/utc/now")
         data = res.json()
-        current_time = data["datetime"]
-        day_of_week = data["day_of_week"]
-
-        dt = datetime.fromisoformat(current_time[:-6])
+        current_time = data["currentDateTime"]
+        dt = datetime.fromisoformat(current_time.replace("Z", ""))
+        day_of_week = dt.weekday()
         time_str = dt.strftime("%H:%M")
 
         if day_of_week == 0 and time_str == "07:30":  # Monday 07:30 AM
@@ -156,11 +155,12 @@ def handle_list_command(text):
 
     elif cmd == ".time":
         try:
-            res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Manila")
+            res = requests.get("https://worldclockapi.com/api/json/utc/now", timeout=5)
             data = res.json()
-            dt = datetime.fromisoformat(data["datetime"][:-6])
-            return dt.strftime("📅 %A, %Y-%m-%d | ⏰ %H:%M:%S")
-        except:
+            dt = datetime.fromisoformat(data["currentDateTime"].replace("Z", ""))
+            return dt.strftime("🗕️ %A, %Y-%m-%d | ⏰ %H:%M:%S")
+        except Exception as e:
+            print(f"[Time Command Error]: {e}")
             return "⚠️ Unable to fetch time."
 
     elif cmd == ".schedule" and len(parts) >= 3:
@@ -172,7 +172,7 @@ def handle_list_command(text):
 
         def scheduled_message():
             for sid in sender_ids:
-                send_text_reply(sid, f"📅 Scheduled ({weekday}): {message_text}")
+                send_text_reply(sid, f"🗓️ Scheduled ({weekday}): {message_text}")
 
         scheduler.add_job(scheduled_message, 'cron', day_of_week=weekdays.index(weekday), hour=7, minute=30)
         return f"✅ Message scheduled for every {weekday} at 07:30."
