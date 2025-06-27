@@ -4,6 +4,8 @@ import os
 import base64
 import json
 import time
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
 
@@ -12,13 +14,14 @@ VERIFY_TOKEN = os.getenv("VERIFY_TOKEN")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 
 memory = {}
+sender_ids = set()  # Track users to send scheduled messages
 
 # Gemini request with retry logic and logging
 def get_gemini_answer(prompt, retries=2):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    
+
     for attempt in range(retries + 1):
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=10)
@@ -43,6 +46,23 @@ def check_model_reach():
     reply = get_gemini_answer("Hello")
     return reply if reply.startswith("🤖") else "✅ Gemini AI model is reachable and responding!"
 
+# Scheduled reminder task
+def scheduled_reminder():
+    try:
+        res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Manila")
+        data = res.json()
+        current_time = data["datetime"]
+        day_of_week = data["day_of_week"]
+
+        dt = datetime.fromisoformat(current_time[:-6])
+        time_str = dt.strftime("%H:%M")
+
+        if day_of_week == 0 and time_str == "07:30":  # Monday 07:30 AM
+            for sid in sender_ids:
+                send_text_reply(sid, "🚜 Reminder: You're on classroom cleaning duty today! Don't forget to check your task list with .list show")
+    except Exception as e:
+        print(f"[Scheduler Error]: {e}")
+
 # .list, .chores, .help command handler
 def handle_list_command(text):
     global memory
@@ -59,7 +79,7 @@ def handle_list_command(text):
                 if len(parts) == 3 and parts[2] == "id":
                     try:
                         encoded = base64.b64encode(json.dumps(memory).encode()).decode()
-                        return f"🧾 Your encoded task list:\n\n{encoded}"
+                        return f"📜 Your encoded task list:\n\n{encoded}"
                     except Exception as e:
                         return f"⚠️ Failed to encode memory: {e}"
 
@@ -77,9 +97,7 @@ def handle_list_command(text):
                     b64_data = parts[2]
                     decoded = json.loads(base64.b64decode(b64_data.encode()).decode())
                     for k, v in decoded.items():
-                        if k not in memory:
-                            memory[k] = []
-                        memory[k].extend(v)
+                        memory[k] = v
                     return "✅ Imported tasks into memory!"
                 except Exception as e:
                     return f"❌ Failed to import: {e}"
@@ -90,6 +108,10 @@ def handle_list_command(text):
                     del memory[subject]
                     return f"List cleared for {subject}!"
                 return f"Nothing to clear for {subject}."
+
+            elif sub_cmd == "clear" and parts[2].lower() == "all":
+                memory.clear()
+                return "✅ All subjects cleared from memory."
 
             elif is_chores and len(parts) >= 2:
                 task_content = " ".join(parts[1:])
@@ -122,11 +144,38 @@ def handle_list_command(text):
             "  → Import a previously saved task list\n\n"
             ".list clear [Subject]\n"
             "  → Clears all tasks under a subject\n\n"
+            ".list clear all\n"
+            "  → Clears all subjects\n\n"
             ".reach\n"
             "  → Checks if Gemini AI is online\n\n"
-            ".help\n"
-            "  → Shows this help message\n"
+            ".time\n"
+            "  → Checks current time in Manila\n\n"
+            ".schedule [day] [message]\n"
+            "  → Schedule a message for a weekday (Monday to Friday)"
         )
+
+    elif cmd == ".time":
+        try:
+            res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Manila")
+            data = res.json()
+            dt = datetime.fromisoformat(data["datetime"][:-6])
+            return dt.strftime("📅 %A, %Y-%m-%d | ⏰ %H:%M:%S")
+        except:
+            return "⚠️ Unable to fetch time."
+
+    elif cmd == ".schedule" and len(parts) >= 3:
+        weekday = parts[1].capitalize()
+        message_text = " ".join(parts[2:])
+        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        if weekday not in weekdays:
+            return "❌ Invalid weekday. Use: Monday to Friday."
+
+        def scheduled_message():
+            for sid in sender_ids:
+                send_text_reply(sid, f"📅 Scheduled ({weekday}): {message_text}")
+
+        scheduler.add_job(scheduled_message, 'cron', day_of_week=weekdays.index(weekday), hour=7, minute=30)
+        return f"✅ Message scheduled for every {weekday} at 07:30."
 
     return None
 
@@ -147,6 +196,7 @@ def webhook():
         for entry in data.get("entry", []):
             for messaging_event in entry.get("messaging", []):
                 sender_id = messaging_event["sender"]["id"]
+                sender_ids.add(sender_id)
                 message = messaging_event.get("message", {}).get("text")
 
                 if not message:
@@ -171,10 +221,7 @@ def webhook():
                     reply = handle_list_command(message)
 
                     if not reply:
-                        # 1. Immediately respond with "thinking..."
                         send_typing_reply(sender_id, "⌛ Processing your request, please wait...")
-
-                        # 2. Then fetch Gemini answer
                         try:
                             reply = get_gemini_answer(message)
                         except Exception as e:
@@ -207,4 +254,7 @@ def send_text_reply(sender_id, message):
     requests.post(send_url, params=params, headers=headers, json=payload)
 
 if __name__ == "__main__":
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(scheduled_reminder, 'interval', minutes=1)
+    scheduler.start()
     app.run(host="0.0.0.0", port=5000, debug=True)
