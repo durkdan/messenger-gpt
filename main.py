@@ -4,7 +4,7 @@ import os
 import base64
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
@@ -47,13 +47,9 @@ def check_model_reach():
 
 def scheduled_reminder():
     try:
-        res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
-        data = res.json()
-        dt = datetime.fromisoformat(data["datetime"])
-        day_of_week = dt.weekday()
-        time_str = dt.strftime("%H:%M")
-
-        if day_of_week == 0 and time_str == "07:30":
+        utc_plus_8 = timezone(timedelta(hours=8))
+        now = datetime.now(utc_plus_8)
+        if now.weekday() == 0 and now.strftime("%H:%M") == "07:30":
             for sid in sender_ids:
                 send_text_reply(sid, "🚜 Reminder: You're on classroom cleaning duty today! Don't forget to check your task list with .list show")
     except Exception as e:
@@ -66,19 +62,12 @@ def handle_list_command(text):
 
     if cmd == ".time":
         try:
-            try:
-                res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Kuala_Lumpur", timeout=5)
-                data = res.json()
-            except Exception as e:
-                print(f"[Time API Fallback]: KL failed with {e}, trying Singapore...")
-                res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
-                data = res.json()
-
-            dt = datetime.fromisoformat(data["datetime"])
-            return dt.strftime("📆 %A, %B %d, %Y | 🕒 %I:%M:%S %p (UTC+8)")
+            utc_plus_8 = timezone(timedelta(hours=8))
+            now = datetime.now(utc_plus_8)
+            return now.strftime("📆 %A, %B %d, %Y | 🕒 %I:%M:%S %p (UTC+8)")
         except Exception as e:
             print(f"[Time Command Error]: {e}")
-            return "⚠️ Unable to fetch time from both KL and SG."
+            return "⚠️ Unable to generate time."
 
     elif cmd == ".schedule" and len(parts) >= 3:
         weekday = parts[1].capitalize()
