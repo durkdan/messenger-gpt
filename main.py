@@ -49,9 +49,10 @@ def check_model_reach():
 # Scheduled reminder task
 def scheduled_reminder():
     try:
-        res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
+        res = requests.get("http://worldclockapi.com/api/json/sg/now", timeout=5)
         data = res.json()
-        dt = datetime.fromisoformat(data["datetime"])
+        current_time = data["currentDateTime"]
+        dt = datetime.strptime(current_time, "%Y-%m-%dT%H:%M%z")
         day_of_week = dt.weekday()
         time_str = dt.strftime("%H:%M")
 
@@ -154,10 +155,11 @@ def handle_list_command(text):
 
     elif cmd == ".time":
         try:
-            res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
+            res = requests.get("http://worldclockapi.com/api/json/sg/now", timeout=5)
             data = res.json()
-            dt = datetime.fromisoformat(data["datetime"])
-            return dt.strftime("🗕️ %A, %Y-%m-%d | ⏰ %H:%M:%S (Asia/Singapore)")
+            current_time = data["currentDateTime"]
+            dt = datetime.strptime(current_time, "%Y-%m-%dT%H:%M%z")
+            return dt.strftime("🗕️ %A, %Y-%m-%d | ⏰ %H:%M:%S (UTC+8 Singapore/Kuala Lumpur)")
         except Exception as e:
             print(f"[Time Command Error]: {e}")
             return "⚠️ Unable to fetch time."
