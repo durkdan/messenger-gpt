@@ -4,7 +4,7 @@ import os
 import base64
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
@@ -16,7 +16,6 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 memory = {}
 sender_ids = set()
 
-# Gemini request with retry logic and logging
 def get_gemini_answer(prompt, retries=2):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
@@ -47,9 +46,13 @@ def check_model_reach():
 
 def scheduled_reminder():
     try:
-        utc_plus_8 = timezone(timedelta(hours=8))
-        now = datetime.now(utc_plus_8)
-        if now.weekday() == 0 and now.strftime("%H:%M") == "07:30":
+        res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
+        data = res.json()
+        dt = datetime.fromisoformat(data["datetime"])
+        day_of_week = dt.weekday()
+        time_str = dt.strftime("%H:%M")
+
+        if day_of_week == 0 and time_str == "07:30":
             for sid in sender_ids:
                 send_text_reply(sid, "🚜 Reminder: You're on classroom cleaning duty today! Don't forget to check your task list with .list show")
     except Exception as e:
@@ -62,12 +65,19 @@ def handle_list_command(text):
 
     if cmd == ".time":
         try:
-            utc_plus_8 = timezone(timedelta(hours=8))
-            now = datetime.now(utc_plus_8)
-            return now.strftime("📆 %A, %B %d, %Y | 🕒 %I:%M:%S %p (UTC+8)")
+            try:
+                res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Kuala_Lumpur", timeout=5)
+                data = res.json()
+            except Exception as e:
+                print(f"[Time API Fallback]: KL failed with {e}, trying Singapore...")
+                res = requests.get("https://worldtimeapi.org/api/timezone/Asia/Singapore", timeout=5)
+                data = res.json()
+
+            dt = datetime.fromisoformat(data["datetime"])
+            return dt.strftime("📆 %A, %B %d, %Y | 🕒 %I:%M:%S %p (UTC+8)")
         except Exception as e:
             print(f"[Time Command Error]: {e}")
-            return "⚠️ Unable to generate time."
+            return "⚠️ Unable to fetch time from both KL and SG."
 
     elif cmd == ".schedule" and len(parts) >= 3:
         weekday = parts[1].capitalize()
@@ -82,6 +92,22 @@ def handle_list_command(text):
 
         scheduler.add_job(scheduled_message, 'cron', day_of_week=weekdays.index(weekday), hour=7, minute=30)
         return f"✅ Message scheduled for every {weekday} at 07:30."
+
+    elif cmd == ".help":
+        return (
+            "📌 Available Commands:\n"
+            "• `.time` — Shows current time (UTC+8)\n"
+            "• `.schedule [Monday-Friday] [Message]` — Set a weekly reminder\n"
+            "• `.list show` — Show task list\n"
+            "• `.reach` — Check Gemini model status\n"
+            "• `.help` — This help message"
+        )
+
+    elif cmd == ".list" and len(parts) >= 2 and parts[1].lower() == "show":
+        return "📝 Your current task list is empty. (Placeholder for future task list)"
+
+    elif cmd == ".reach":
+        return check_model_reach()
 
     return None
 
@@ -119,9 +145,6 @@ def webhook():
 
                 elif message_lower in ["are you online?", "online", "are you on", "online ka ba"]:
                     reply = "YES! Fully up and responding here to fulfill your request and answers!."
-
-                elif message_lower == ".reach":
-                    reply = check_model_reach()
 
                 else:
                     reply = handle_list_command(message)
