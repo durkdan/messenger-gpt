@@ -95,16 +95,31 @@ def handle_list_command(text):
 
     elif cmd == ".help":
         return (
-            "📜 Available Commands:\n"
-            "• `.time` — Shows current time (UTC+8)\n"
-            "• `.schedule [Monday-Friday] [Message]` — Set a weekly reminder\n"
-            "• `.list show` — Show task list\n"
-            "• `.list import [base64]` — Import base64 task list\n"
-            "• `.list add [subject] [task]` — Add task to subject\n"
-            "• `.list clear` — Clear all tasks\n"
-            "• `.list export` — Export task list in base64\n"
-            "• `.reach` — Check Gemini model status\n"
-            "• `.help` — This help message"
+            "📘 **Messenger-GPT Help Menu**\n\n"
+            "**Commands you can use:**\n\n"
+            "🔹 `.list add [subject] [task]`\n"
+            "→ Adds a task to a subject\n"
+            " e.g., `.list add sci Finish the presentation`\n\n"
+            "🔹 `.list show`\n"
+            "→ Displays all tasks you’ve listed\n\n"
+            "🔹 `.list clear`\n"
+            "→ Clears all tasks\n\n"
+            "🔹 `.list import [base64]`\n"
+            "→ Import tasks using a base64 string\n\n"
+            "🔹 `.list export`\n"
+            "→ Export current tasks as a base64 string\n\n"
+            "🔹 `.schedule [Monday-Friday] [message]`\n"
+            "→ Schedule weekly reminders (sent at 07:30)\n\n"
+            "🔹 `.reach`\n"
+            "→ Checks if the AI model is online and responding\n\n"
+            "🔹 `.write [subject] [category] [topic]`\n"
+            "→ Generates a paragraph/speech/summary based on input\n"
+            " e.g., `.write fil paragraph buod ng ibong adarna`\n\n"
+            "🔹 `.rewrite [your text]`\n"
+            "→ Requests a rewritten version of your input text\n\n"
+            "**💡 Tips:**\n"
+            "• You can just ask questions directly (starting with **who, what, when, where, why, how, if**, etc.) and the bot will auto-reply.\n\n"
+            "📚 **Subjects Supported:**\nFil, Sci, Ap, TLE, Math, Mapeh, Eng, Esp"
         )
 
     elif cmd == ".list":
@@ -149,6 +164,17 @@ def handle_list_command(text):
 
     elif cmd == ".reach":
         return check_model_reach()
+
+    elif cmd == ".write" and len(parts) >= 4:
+        subject = parts[1].capitalize()
+        category = parts[2].lower()
+        topic = " ".join(parts[3:])
+        prompt = (
+            f"Write a {category} for the subject {subject}.\n\n"
+            f"Topic: {topic}\n\n"
+            f"Make sure it's clear, relevant, and appropriate for a school assignment."
+        )
+        return get_gemini_answer(prompt)
 
     return None
 
