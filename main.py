@@ -99,12 +99,31 @@ def handle_list_command(text):
             "• `.time` — Shows current time (UTC+8)\n"
             "• `.schedule [Monday-Friday] [Message]` — Set a weekly reminder\n"
             "• `.list show` — Show task list\n"
+            "• `.list import [base64]` — Import base64 task list\n"
             "• `.reach` — Check Gemini model status\n"
             "• `.help` — This help message"
         )
 
-    elif cmd == ".list" and len(parts) >= 2 and parts[1].lower() == "show":
-        return "📝 Your current task list is empty. (Placeholder for future task list)"
+    elif cmd == ".list":
+        if len(parts) >= 2 and parts[1].lower() == "show":
+            if not memory:
+                return "📝 Your task list is empty."
+            response = "📝 Task List:\n"
+            for subject, tasks in memory.items():
+                response += f"\n📚 {subject}:\n"
+                for task in tasks:
+                    response += f"  - {task}\n"
+            return response
+
+        elif len(parts) >= 3 and parts[1].lower() == "import":
+            try:
+                b64_data = " ".join(parts[2:])
+                decoded = base64.b64decode(b64_data).decode("utf-8")
+                task_data = json.loads(decoded)
+                memory.update(task_data)
+                return "✅ Task list imported successfully!"
+            except Exception as e:
+                return f"⚠️ Failed to import task list: {e}"
 
     elif cmd == ".reach":
         return check_model_reach()
