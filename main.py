@@ -95,11 +95,14 @@ def handle_list_command(text):
 
     elif cmd == ".help":
         return (
-            "📌 Available Commands:\n"
+            "📜 Available Commands:\n"
             "• `.time` — Shows current time (UTC+8)\n"
             "• `.schedule [Monday-Friday] [Message]` — Set a weekly reminder\n"
             "• `.list show` — Show task list\n"
             "• `.list import [base64]` — Import base64 task list\n"
+            "• `.list add [subject] [task]` — Add task to subject\n"
+            "• `.list clear` — Clear all tasks\n"
+            "• `.list export` — Export task list in base64\n"
             "• `.reach` — Check Gemini model status\n"
             "• `.help` — This help message"
         )
@@ -124,6 +127,25 @@ def handle_list_command(text):
                 return "✅ Task list imported successfully!"
             except Exception as e:
                 return f"⚠️ Failed to import task list: {e}"
+
+        elif len(parts) >= 4 and parts[1].lower() == "add":
+            subject = parts[2].capitalize()
+            task = " ".join(parts[3:])
+            if subject not in memory:
+                memory[subject] = []
+            memory[subject].append(task)
+            return f"✅ Added task under {subject}."
+
+        elif len(parts) == 2 and parts[1].lower() == "clear":
+            memory.clear()
+            return "🗑️ Task list cleared."
+
+        elif len(parts) == 2 and parts[1].lower() == "export":
+            try:
+                encoded = base64.b64encode(json.dumps(memory).encode("utf-8")).decode("utf-8")
+                return f"📄 Exported Task List (base64):\n{encoded}"
+            except Exception as e:
+                return f"⚠️ Export failed: {e}"
 
     elif cmd == ".reach":
         return check_model_reach()
